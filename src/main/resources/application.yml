@@ -1,0 +1,13 @@
+logging:
+  level:
+    org.springframework: ERROR
+
+spring:
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      maxFileSize: 10MB
+      maxRequestSize: 10MB
+  main:
+    banner-mode: off
