@@ -11,3 +11,8 @@ spring:
       maxRequestSize: 10MB
   main:
     banner-mode: off
+
+  datasource:
+    url: jdbc:sqlserver://localhost;databaseName=imageDetection
+    username: username
+    password: password

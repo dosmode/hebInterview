@@ -1,7 +1,7 @@
 package com.heb.interview.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.heb.interview.model.ImageDto;
+import com.heb.interview.model.requestDto;
 import com.heb.interview.service.ObjectDetectService;
 import com.heb.interview.utill.UuidValidator;
 import org.apache.commons.lang3.StringUtils;
@@ -14,13 +14,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RestController
-public class ImageController {
+public class ImageController  {
 
     UuidValidator uuidValidator;
     ObjectDetectService objectDetectService;
@@ -29,15 +31,12 @@ public class ImageController {
     String IMAGE_OBJECT_QUERY_REGEX = "^\\\"+[\\w,]+\\\"$";
     Pattern IMAGE_OBJECT_QUERY_PATTERN = Pattern.compile(IMAGE_OBJECT_QUERY_REGEX);
 
+    private final static String PROJECT_IMAGE_STORE_PATH = "src/main/resources/imageSources/";
 
     @Autowired
     public ImageController(UuidValidator uuidValidator, ObjectDetectService objectDetectService) {
         this.uuidValidator = uuidValidator;
         this.objectDetectService = objectDetectService;
-    }
-
-    public ImageController(UuidValidator uuidValidator) {
-        this.uuidValidator = uuidValidator;
     }
 
 
@@ -72,22 +71,57 @@ public class ImageController {
         return imageId.toString();
     }
 
+
+    @RequestMapping(value="/images", method=RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Object> uploadFile(@RequestParam(required=false, value="imageFile") MultipartFile imageFile,
+                                             @RequestParam(required=true, value="jsonData")String jsonData) throws IOException {
+        requestDto result = new requestDto();
+        ObjectMapper objectMapper = new ObjectMapper();
+        requestDto userData = objectMapper.readValue(jsonData, requestDto.class);
+
+        if (imageFile != null) {
+            saveImageToLocal(imageFile);
+            objectDetectService.detectLocalizedObjects(imageFile.getInputStream());
+            return new ResponseEntity<>(jsonData, HttpStatus.OK);
+        } else {
+            InputStream input = null;
+            try{
+                input = new URL(userData.getImageFilePath()).openStream();
+            }catch (MalformedURLException e){
+                logger.error("Invalid URL");
+            }catch (Exception e){
+                logger.error("Couldn't process with provided url");
+            }
+            if(input != null){
+                //TODO get returned ID from DB
+                objectDetectService.detectLocalizedObjects(input);
+                return new ResponseEntity<>(result, HttpStatus.OK);
+            }else {
+                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            }
+        }
+    }
+
+    private void saveImageToLocal(MultipartFile imageFile) {
+        try{
+            byte[] bytes = imageFile.getBytes();
+            BufferedOutputStream stream =
+                    new BufferedOutputStream(new FileOutputStream(PROJECT_IMAGE_STORE_PATH + imageFile.getOriginalFilename()));
+            stream.write(bytes);
+            stream.close();
+            logger.info("Successfully stored uploaded file in local");
+        }catch (Exception e){
+            logger.error("Failed to store the file in local");
+        }
+    }
+
+
     @DeleteMapping(path = "/{imageId}")
-    public ImageDto delete(@PathVariable("imageId") int imageId) {
-        ImageDto deletedEmp = null;
+    public requestDto delete(@PathVariable("imageId") int imageId) {
+        requestDto deletedEmp = null;
 
         return null;
     }
 
-
-    @RequestMapping(value = "/images", method = RequestMethod.POST)
-    public ResponseEntity<Object> uploadFile(@RequestBody ImageDto imageDto) throws IOException {
-        ObjectMapper objectMapper = new ObjectMapper();
-
-            objectDetectService.detectLocalizedObjects(imageDto.getImageFilePath());
-
-
-        return new ResponseEntity<>(imageDto, HttpStatus.OK);
-    }
 
 }

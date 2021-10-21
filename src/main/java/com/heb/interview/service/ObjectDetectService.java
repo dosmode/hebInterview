@@ -2,26 +2,26 @@ package com.heb.interview.service;
 
 import com.google.cloud.vision.v1.*;
 import com.google.protobuf.ByteString;
+import com.heb.interview.model.DetectedObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class ObjectDetectService {
-    public static void detectLocalizedObjects(String filePath) throws IOException {
-        List<AnnotateImageRequest> requests = new ArrayList<>();
-        File file = new File(filePath);
-        //Getting the URI object
-        InputStream input = new URL(filePath).openStream();
 
-        ByteString imgBytes = ByteString.readFrom(input);
+    public static DetectedObject detectLocalizedObjects(InputStream filePath) throws IOException {
+        Logger logger = LoggerFactory.getLogger(ObjectDetectService.class);
+        DetectedObject detectedObject = null;
+        List<AnnotateImageRequest> requests = new ArrayList<>();
+
+
+        ByteString imgBytes = ByteString.readFrom(filePath);
 
         Image img = Image.newBuilder().setContent(imgBytes).build();
         AnnotateImageRequest request =
@@ -42,15 +42,13 @@ public class ObjectDetectService {
             // Display the results
             for (AnnotateImageResponse res : responses) {
                 for (LocalizedObjectAnnotation entity : res.getLocalizedObjectAnnotationsList()) {
-                    System.out.format("Object name: %s%n", entity.getName());
-                    System.out.format("Confidence: %s%n", entity.getScore());
-                    System.out.format("Normalized Vertices:%n");
-                    entity
-                            .getBoundingPoly()
-                            .getNormalizedVerticesList()
-                            .forEach(vertex -> System.out.format("- (%s, %s)%n", vertex.getX(), vertex.getY()));
+                    detectedObject = DetectedObject.builder().name(entity.getName())
+                            .confidence((int) Math.round(entity.getScore() * 100.0)).build();
+                    logger.info("Object name: {}", entity.getName());
+                    logger.info("Confidence: {}%", Math.round(entity.getScore() * 100.0) );
                 }
             }
         }
+        return detectedObject;
     }
 }

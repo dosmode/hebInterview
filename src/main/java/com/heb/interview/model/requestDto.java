@@ -1,5 +1,6 @@
 package com.heb.interview.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,11 +9,13 @@ import java.util.Optional;
 
 @Data
 @Builder
-public class ImageDto {
+@AllArgsConstructor
+@NoArgsConstructor
+public class requestDto {
     private String id;
     private String imageFilePath;
     private String label;
-    private Boolean enableObjectDetection;
+    private boolean enableObjectDetection;
 
     public Optional<String> getLabel(){
         return Optional.ofNullable(label);
