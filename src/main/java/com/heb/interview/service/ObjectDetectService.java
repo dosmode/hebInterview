@@ -2,25 +2,22 @@ package com.heb.interview.service;
 
 import com.google.cloud.vision.v1.*;
 import com.google.protobuf.ByteString;
-import com.heb.interview.model.DetectedObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Component
 public class ObjectDetectService {
 
-    public static DetectedObject detectLocalizedObjects(InputStream filePath) throws IOException {
+    public static Map<String, Float> detectLocalizedObjects(InputStream filePath, boolean enableObjectDetection) throws IOException {
+        if (!enableObjectDetection) return new HashMap<>();
+        Map<String, Float> result = new HashMap<>();
         Logger logger = LoggerFactory.getLogger(ObjectDetectService.class);
-        DetectedObject detectedObject = null;
         List<AnnotateImageRequest> requests = new ArrayList<>();
-
-
         ByteString imgBytes = ByteString.readFrom(filePath);
 
         Image img = Image.newBuilder().setContent(imgBytes).build();
@@ -39,16 +36,16 @@ public class ObjectDetectService {
             BatchAnnotateImagesResponse response = client.batchAnnotateImages(requests);
             List<AnnotateImageResponse> responses = response.getResponsesList();
 
-            // Display the results
+            // store the results
             for (AnnotateImageResponse res : responses) {
                 for (LocalizedObjectAnnotation entity : res.getLocalizedObjectAnnotationsList()) {
-                    detectedObject = DetectedObject.builder().name(entity.getName())
-                            .confidence((int) Math.round(entity.getScore() * 100.0)).build();
+                    result.put(entity.getName(), result.getOrDefault(entity.getName(), (float) (entity.getScore() * 100.0)) > (float) (entity.getScore() * 100.0) ? (result.getOrDefault(entity.getName(), (float) (entity.getScore() * 100.0))) : (float) (entity.getScore() * 100.0));
                     logger.info("Object name: {}", entity.getName());
-                    logger.info("Confidence: {}%", Math.round(entity.getScore() * 100.0) );
+                    logger.info("Confidence: {}%", Math.round(entity.getScore() * 100.00));
                 }
             }
+
         }
-        return detectedObject;
+        return result;
     }
 }

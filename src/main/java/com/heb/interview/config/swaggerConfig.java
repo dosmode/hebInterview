@@ -18,5 +18,4 @@ public class swaggerConfig {
                                 "enhanced content using springdoc and OpenAPI for HEB interview")
                         .version("1.0"));
     }
-
 }

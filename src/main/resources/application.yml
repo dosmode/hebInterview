@@ -13,6 +13,12 @@ spring:
     banner-mode: off
 
   datasource:
-    url: jdbc:sqlserver://localhost;databaseName=imageDetection
-    username: username
-    password: password
+    url: jdbc:sqlserver://localhost:1433;databaseName=imageDetection
+    username: jackson
+    password: jackson
+  jpa:
+    show-sql: true
+    hibernate:
+      naming:
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl

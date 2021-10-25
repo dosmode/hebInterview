@@ -1,7 +1,10 @@
 package com.heb.interview.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.heb.interview.model.requestDto;
+import com.heb.interview.model.Request;
+import com.heb.interview.database.repository.DetectedObjectRepository;
+import com.heb.interview.database.repository.RequestRepository;
+import com.heb.interview.service.ImageHandlingService;
 import com.heb.interview.service.ObjectDetectService;
 import com.heb.interview.utill.UuidValidator;
 import org.apache.commons.lang3.StringUtils;
@@ -14,47 +17,69 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.transaction.Transactional;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RestController
-public class ImageController  {
+public class ImageController {
 
     UuidValidator uuidValidator;
     ObjectDetectService objectDetectService;
+    final ImageHandlingService imageHandlingService;
 
-    Logger logger = LoggerFactory.getLogger(ImageController.class);
-    String IMAGE_OBJECT_QUERY_REGEX = "^\\\"+[\\w,]+\\\"$";
-    Pattern IMAGE_OBJECT_QUERY_PATTERN = Pattern.compile(IMAGE_OBJECT_QUERY_REGEX);
+    private final RequestRepository requestRepository;
+    private final DetectedObjectRepository detectedObjectRepository;
+
+    final Logger logger = LoggerFactory.getLogger(ImageController.class);
+    final String IMAGE_OBJECT_QUERY_REGEX = "^\"+([\\w, &])+\"$";
+    final Pattern IMAGE_OBJECT_QUERY_PATTERN = Pattern.compile(IMAGE_OBJECT_QUERY_REGEX);
 
     private final static String PROJECT_IMAGE_STORE_PATH = "src/main/resources/imageSources/";
 
     @Autowired
-    public ImageController(UuidValidator uuidValidator, ObjectDetectService objectDetectService) {
-        this.uuidValidator = uuidValidator;
-        this.objectDetectService = objectDetectService;
+    public ImageController(ImageHandlingService imageHandlingService, RequestRepository requestRepository, DetectedObjectRepository detectedObjectRepository) {
+        this.imageHandlingService = imageHandlingService;
+        this.requestRepository = requestRepository;
+        this.detectedObjectRepository = detectedObjectRepository;
     }
 
 
     @RequestMapping(value = "/images", method = RequestMethod.GET)
-    public String getImageUsingQueryParam(@RequestParam(required = false, name = "objects") String object) {
-        Matcher objectQueryMatcher = IMAGE_OBJECT_QUERY_PATTERN.matcher(object);
+    public ResponseEntity<Object> getImageUsingQueryParam(@RequestParam(required = false, name = "objects") String object) {
         if (!StringUtils.isEmpty(object)) {
+            Matcher objectQueryMatcher = IMAGE_OBJECT_QUERY_PATTERN.matcher(object);
             logger.info("/images call with optional query param has been triggered.");
             if (objectQueryMatcher.find()) {
-                logger.info("requested object : {} ", object);
+                List<String> objectList = Arrays.asList(objectQueryMatcher.group(0).replaceAll("\"", "").split(","));
+                List<Request> queriedRequest = requestRepository.findALLByDetectedObject(objectList);
+                queriedRequest.forEach(q -> q.setDetectedObjectList(detectedObjectRepository.fineAllByRequestID(q.getRequestId())));
+                return new ResponseEntity<>(queriedRequest, HttpStatus.OK);
+
             } else {
-                logger.error("query pattern doesn't allow. Please check the query param. ex) \"dog,cat\". your input query param is {} ", object);
+                String error = "query pattern [[" + object + "]] doesn't allow. Please check the query param. ex) \"dog,cat\". your input query param is";
+                logger.error(error + " {} ", object);
+                return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
             }
         } else {
+            List<Request> requestObject = requestRepository.findAllRequest();
+            requestObject.forEach(
+                    request -> request.setDetectedObjectList(
+                            detectedObjectRepository.findALLByDetectedObjectId(
+                                    request.getRequestId().toString()
+                            )
+                    )
+            );
             logger.info("/images call has been triggered. All image metadata will present");
-
+            return new ResponseEntity<>(requestObject, HttpStatus.OK);
         }
-        return object;
     }
 
     @RequestMapping(value = "/images/{imageId}", method = RequestMethod.GET)
@@ -72,56 +97,60 @@ public class ImageController  {
     }
 
 
-    @RequestMapping(value="/images", method=RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Object> uploadFile(@RequestParam(required=false, value="imageFile") MultipartFile imageFile,
-                                             @RequestParam(required=true, value="jsonData")String jsonData) throws IOException {
-        requestDto result = new requestDto();
+    @Transactional
+    @RequestMapping(value = "/images", method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Object> uploadFile(@RequestParam(required = false, value = "imageFile") MultipartFile imageFile,
+                                             @RequestParam(value = "jsonData") String jsonData) throws IOException {
         ObjectMapper objectMapper = new ObjectMapper();
-        requestDto userData = objectMapper.readValue(jsonData, requestDto.class);
-
+        Request userData = objectMapper.readValue(jsonData, Request.class);
+        Date date = new Date();
+        userData.setLastModifiedDate(new java.sql.Date(date.getTime()));
+        InputStream input = null;
+        String filePath = null;
         if (imageFile != null) {
-            saveImageToLocal(imageFile);
-            objectDetectService.detectLocalizedObjects(imageFile.getInputStream());
-            return new ResponseEntity<>(jsonData, HttpStatus.OK);
+            filePath = PROJECT_IMAGE_STORE_PATH + imageFile.getOriginalFilename();
+            input = saveImageToLocal(imageFile);
         } else {
-            InputStream input = null;
-            try{
-                input = new URL(userData.getImageFilePath()).openStream();
-            }catch (MalformedURLException e){
+            try {
+                filePath = userData.getImageFilePath();
+                input = new URL(filePath).openStream();
+            } catch (MalformedURLException e) {
                 logger.error("Invalid URL");
-            }catch (Exception e){
+            } catch (Exception e) {
                 logger.error("Couldn't process with provided url");
             }
-            if(input != null){
-                //TODO get returned ID from DB
-                objectDetectService.detectLocalizedObjects(input);
-                return new ResponseEntity<>(result, HttpStatus.OK);
-            }else {
-                return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            }
         }
+
+        userData = imageHandlingService.objectDetectionService(userData, input, filePath);
+
+        return new ResponseEntity<>(userData, HttpStatus.OK);
     }
 
-    private void saveImageToLocal(MultipartFile imageFile) {
-        try{
-            byte[] bytes = imageFile.getBytes();
+
+    private InputStream saveImageToLocal(MultipartFile imageFile) {
+        byte[] bytes;
+        InputStream targetStream = null;
+        try {
+            bytes = imageFile.getBytes();
+            targetStream = new ByteArrayInputStream(bytes);
+
             BufferedOutputStream stream =
                     new BufferedOutputStream(new FileOutputStream(PROJECT_IMAGE_STORE_PATH + imageFile.getOriginalFilename()));
             stream.write(bytes);
             stream.close();
             logger.info("Successfully stored uploaded file in local");
-        }catch (Exception e){
+        } catch (Exception e) {
             logger.error("Failed to store the file in local");
         }
+        return targetStream;
     }
 
-
-    @DeleteMapping(path = "/{imageId}")
-    public requestDto delete(@PathVariable("imageId") int imageId) {
-        requestDto deletedEmp = null;
-
-        return null;
-    }
+//
+//    @DeleteMapping(path = "/{imageId}")
+//    public Request delete(@PathVariable("imageId") int imageId) {
+//
+//        return null;
+//    }
 
 
 }

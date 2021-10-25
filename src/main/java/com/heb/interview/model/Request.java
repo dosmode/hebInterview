@@ -1,30 +1,27 @@
 package com.heb.interview.model;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.heb.interview.model.DetectedObject;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.persistence.*;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
-@Entity
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-@Table(name = "detectedObject")
-@Cacheable
-public class DetectedObject {
-    @Id
-    @Basic(optional = false)
-    private UUID objectDetectionID;
+public class Request {
 
     private UUID requestId;
-    private String objectName;
-    private float confidence;
+    private String imageFilePath;
+    private String label;
+    private boolean enableObjectDetection;
+    private List<DetectedObject> detectedObjectList;
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm")
     private Date lastModifiedDate;
 }
