@@ -32,4 +32,8 @@ public class RequestRepository {
     public List<Request> findALLByDetectedObject(List<String> entity) {
         return requestDao.findAllByRequestObject(entity);
     }
+
+    public Request findByImageID(String id) {
+        return requestDao.findByImageId(id);
+    }
 }

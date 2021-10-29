@@ -31,6 +31,7 @@ import java.util.regex.Pattern;
 @RestController
 public class ImageController {
 
+    @Autowired
     UuidValidator uuidValidator;
     ObjectDetectService objectDetectService;
     final ImageHandlingService imageHandlingService;
@@ -83,17 +84,15 @@ public class ImageController {
     }
 
     @RequestMapping(value = "/images/{imageId}", method = RequestMethod.GET)
-    public String getImageUsingPathParam(@PathVariable String imageId) {
-        logger.info(UUID.randomUUID().toString());
-
+    public ResponseEntity<Object>  getImageUsingPathParam(@PathVariable String imageId) {
         if (!uuidValidator.isUUID(imageId)) {
             logger.error("Invalid UUID: {} detected. Please enter valid UUID.", imageId);
         } else {
             logger.info("/images call with path param has been triggered. UUID: {}", imageId);
-
         }
-
-        return imageId.toString();
+        Request requestObject = requestRepository.findByImageID(imageId);
+        requestObject.setDetectedObjectList( detectedObjectRepository.findALLByDetectedObjectId( requestObject.getRequestId().toString() ));
+        return new ResponseEntity<>(requestObject, HttpStatus.OK);
     }
 
 

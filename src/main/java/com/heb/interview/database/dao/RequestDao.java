@@ -31,7 +31,7 @@ public class RequestDao extends AbstractDao {
             "SELECT * FROM dbo.request WHERE imageFilePath = ?";
 
     private static final String SQL_GET_ALL_REQUEST_BY_OBJECT_NAME =
-            "SELECT R.requestId, R.imageFilePath, R.label, R.enableObjectDetection " +
+            "SELECT R.requestId, R.imageFilePath, R.label, R.enableObjectDetection, R.lastModifiedDate " +
                     "FROM Request AS R " +
                     "JOIN detectedObject AS DO on DO.requestId = R.requestId " +
                     "WHERE DO.objectName IN (:objects)";
@@ -93,4 +93,14 @@ public class RequestDao extends AbstractDao {
         params.addValue("objects", objectArray);
         return getNamedParameterJdbcTemplate().query(SQL_GET_ALL_REQUEST_BY_OBJECT_NAME, params, BeanPropertyRowMapper.newInstance(Request.class));
     }
+
+    public Request findByImageId(String imageID) {
+
+        if (imageID == null) {
+            throw new IllegalArgumentException("TagGroup object cannot be null");
+        }
+
+        return getJdbcTemplate().query(SQL_GET_REQUEST_BY_ID, BeanPropertyRowMapper.newInstance(Request.class), imageID).get(0);
+    }
+
 }
